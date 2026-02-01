@@ -3,12 +3,15 @@
 # Agent Platform - Local Development Runner
 # Usage: ./run.sh [command]
 # Commands:
+#   local    - Start local MongoDB + dev server (recommended for first run)
 #   dev      - Start development server (default)
 #   worker   - Start background worker
 #   all      - Start both dev server and worker
 #   build    - Build for production
 #   start    - Start production server
 #   install  - Install dependencies
+#   db       - Start local MongoDB only
+#   db:stop  - Stop local MongoDB
 #   help     - Show this help message
 
 set -e
@@ -35,6 +38,16 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if Docker is installed
+check_docker() {
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker is not installed. Please install Docker first."
+        print_info "Visit: https://docs.docker.com/get-docker/"
+        exit 1
+    fi
+    print_success "Docker detected"
 }
 
 # Check if Node.js is installed
@@ -94,6 +107,52 @@ check_env() {
     fi
 }
 
+# Setup local environment (for local-first development)
+setup_local_env() {
+    if [ ! -f ".env.local" ]; then
+        if [ -f ".env.local.example" ]; then
+            print_info "Creating .env.local for local development..."
+            cp .env.local.example .env.local
+            print_success "Created .env.local with local defaults (mock LLM + local MongoDB)"
+        else
+            print_error ".env.local.example not found"
+            exit 1
+        fi
+    else
+        print_success ".env.local found"
+    fi
+}
+
+# Start local MongoDB via Docker
+start_db() {
+    check_docker
+    print_info "Starting MongoDB via Docker..."
+    docker compose up -d mongodb
+    print_success "MongoDB started on localhost:27017"
+}
+
+# Stop local MongoDB
+stop_db() {
+    check_docker
+    print_info "Stopping MongoDB..."
+    docker compose down
+    print_success "MongoDB stopped"
+}
+
+# Wait for MongoDB to be ready
+wait_for_db() {
+    print_info "Waiting for MongoDB to be ready..."
+    for i in {1..30}; do
+        if docker exec agent-platform-mongo mongosh --eval "db.runCommand('ping')" &> /dev/null; then
+            print_success "MongoDB is ready"
+            return 0
+        fi
+        sleep 1
+    done
+    print_error "MongoDB failed to start in time"
+    exit 1
+}
+
 # Show help message
 show_help() {
     echo ""
@@ -102,21 +161,38 @@ show_help() {
     echo "Usage: ./run.sh [command]"
     echo ""
     echo "Commands:"
-    echo "  dev      Start Next.js development server (default)"
+    echo "  local    Start local MongoDB + dev server (recommended for first run)"
+    echo "  dev      Start Next.js development server"
     echo "  worker   Start background worker for async tasks"
     echo "  all      Start both dev server and worker"
     echo "  build    Build for production"
     echo "  start    Start production server"
     echo "  install  Install/update dependencies"
+    echo "  db       Start local MongoDB only (via Docker)"
+    echo "  db:stop  Stop local MongoDB"
     echo "  lint     Run linting"
     echo "  help     Show this help message"
     echo ""
+    echo "Quick Start (local development, no external services):"
+    echo "  ./run.sh local     # Starts MongoDB + dev server with mock LLM"
+    echo ""
     echo "Examples:"
-    echo "  ./run.sh           # Start dev server"
-    echo "  ./run.sh dev       # Start dev server"
+    echo "  ./run.sh local     # Best for first-time setup"
+    echo "  ./run.sh dev       # Just the dev server (MongoDB must be running)"
     echo "  ./run.sh worker    # Start worker only"
     echo "  ./run.sh all       # Start both server and worker"
     echo ""
+}
+
+# Start local development (MongoDB + dev server)
+start_local() {
+    print_info "Starting local development environment..."
+    start_db
+    wait_for_db
+    echo ""
+    print_info "Starting development server on http://localhost:3000"
+    print_info "Using mock LLM mode (no API keys required)"
+    npm run dev
 }
 
 # Start development server
@@ -195,6 +271,20 @@ main() {
             check_node
             check_npm
             install_deps
+            ;;
+        local)
+            check_node
+            check_npm
+            check_docker
+            check_dependencies
+            setup_local_env
+            start_local
+            ;;
+        db)
+            start_db
+            ;;
+        db:stop)
+            stop_db
             ;;
         dev)
             check_node
