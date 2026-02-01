@@ -1,0 +1,48 @@
+# Render Blueprint for Agent Platform
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Main API / Dashboard
+  - type: web
+    name: agent-platform
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: WA_ACCESS_TOKEN
+        sync: false
+      - key: WA_VERIFY_TOKEN
+        sync: false
+      - key: WA_PHONE_NUMBER_ID
+        sync: false
+
+  # Background worker (optional - for async jobs like document indexing)
+  - type: worker
+    name: agent-worker
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm run worker
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
